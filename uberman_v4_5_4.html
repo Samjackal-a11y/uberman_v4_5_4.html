@@ -12,21 +12,23 @@
       border: 1px solid #333; padding: 12px;
       font-size: 13px; z-index: 20;
     }
-    /* Buttons */
-    #viewToggle, #overlayToggle, #filterToggle {
-      position: fixed; z-index: 30;
-    }
-    #viewToggle { top: 20px; left: 20px; }
-    #overlayToggle { top: 60px; right: 20px; }
-    #filterToggle { top: 20px; right: 20px; }
     button { background:#111; color:#9f9; border:1px solid #333; padding:6px 10px; margin:2px; cursor:pointer; }
     button:hover { background:#0a0a0a; }
+    /* Commit viewer styling */
+    .commit-card {
+      background: #fff; color:#000; margin-bottom: 1em; padding: 1em 1.2em;
+      border-radius: 7px; box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+    }
+    .commit-message { font-size: 1.1em; margin: 0 0 .5em 0; }
+    .commit-meta { font-size: .95em; color: #555; margin-bottom: .4em; }
+    a.button { background: #24292f; color: white; padding: 0.4em 0.9em; text-decoration: none; border-radius: 4px;}
+    a.button:hover { background: #444; }
   </style>
 </head>
 <body>
 
-  <!-- Matrix Rain (homepage hero) -->
-  <canvas id="matrixCanvas" width="1280" height="720" style="background:#000;"></canvas>
+  <!-- Matrix Rain -->
+  <canvas id="matrixCanvas"></canvas>
 
   <!-- ConvoView -->
   <div id="convoView" class="overlay" style="top:60px; right:20px; width:400px; height:70%; overflow-y:scroll; display:none;">
@@ -46,281 +48,61 @@
     <canvas id="constellationCanvas" width="760" height="440" style="background:#111;"></canvas>
   </div>
 
-  <!-- LegendView -->
-  <div id="legendView" class="overlay" style="top:20px; left:50%; transform:translateX(-50%); display:none;">
-    <h3 style="color:#ffffff;">Constellation Legend</h3>
-    <div><span style="color:#44ff44;">●</span> Family Milestones</div>
-    <div><span style="color:#ffaa00;">●</span> Work / Sawmill Milestones</div>
-    <div><span style="color:#ff4444;">●</span> Technical Evolution</div>
-    <div><span style="color:#44aaff;">●</span> Conversation / Meaning Logs</div>
-    <div><span style="color:#8888ff;">━</span> Constellation Connections</div>
+  <!-- Commit Viewer -->
+  <div id="commitView" class="overlay" style="bottom:20px; left:20px; width:600px; height:300px; overflow-y:scroll; display:none; background:#f5f5f5; color:#000;">
+    <h3 style="color:#000;">Recent Commits for <code>uberman_v4_5_4.html</code></h3>
+    <div id="commits">Loading...</div>
   </div>
 
-  <!-- BacklogView -->
-  <div id="backlogView" class="overlay" style="top:80px; left:50%; transform:translateX(-50%); width:600px; height:400px; overflow-y:scroll; display:none;">
-    <h3 style="color:#ff66cc;">Backlog Viewer — Keepsake Shelf</h3>
-    <div id="backlogEntries"></div>
-  </div>
-
-  <!-- ExportView -->
-  <div id="exportView" class="overlay" style="bottom:20px; right:20px; width:320px; display:none;">
-    <h3 style="color:#ff9900;">ExportView — Save Logs</h3>
-    <button onclick="exportJSON()">Export JSON</button>
-    <button onclick="exportCSV()">Export CSV</button>
-    <pre id="exportOutput" style="max-height:150px; overflow-y:auto; background:#111; padding:6px;"></pre>
-  </div>
-
-  <!-- Toggle: Matrix ↔ Constellation -->
-  <div id="viewToggle">
+  <!-- Toggle Buttons -->
+  <div id="viewToggle" style="position:fixed; top:20px; left:20px; z-index:30;">
     <button onclick="showMatrix()">Matrix Rain</button>
     <button onclick="showConstellation()">Constellation Dashboard</button>
   </div>
-
-  <!-- Overlay Toggle Buttons -->
-  <div id="overlayToggle">
-    <button onclick="toggleOverlay('convoView')">Toggle ConvoView</button>
-    <button onclick="toggleOverlay('timelineView')">Toggle TimelineView</button>
-    <button onclick="toggleOverlay('constellationView')">Toggle ConstellationView</button>
-    <button onclick="toggleOverlay('legendView')">Toggle Legend</button>
-    <button onclick="toggleOverlay('backlogView')">Toggle Backlog Viewer</button>
-    <button onclick="toggleOverlay('exportView')">Toggle ExportView</button>
-  </div>
-
-  <!-- Filter Buttons -->
-  <div id="filterToggle">
-    <button onclick="toggleCategory('family')">Family</button>
-    <button onclick="toggleCategory('work')">Work</button>
-    <button onclick="toggleCategory('technical')">Technical</button>
-    <button onclick="toggleCategory('convo')">Convo</button>
+  <div id="overlayToggle" style="position:fixed; top:60px; right:20px; z-index:30;">
+    <button onclick="toggleOverlay('convoView')">ConvoView</button>
+    <button onclick="toggleOverlay('timelineView')">TimelineView</button>
+    <button onclick="toggleOverlay('constellationView')">ConstellationView</button>
+    <button onclick="toggleOverlay('commitView')">Commit Viewer</button>
   </div>
 
   <script>
-    // -----------------------------
-    // Logs & Recording
-    // -----------------------------
-    const evolutionLog = [], convoLog = [];
-
-    function recordEvolution(version, drivers, notes, category="technical") {
-      const entry = {
-        version,
-        time: new Date().toISOString(),
-        emotion: drivers.emotion,
-        curiosity: drivers.curiosity,
-        notes,
-        category
-      };
-      evolutionLog.push(entry);
-    }
-    function recordConvo(version, snippet, meaning, category="technical") {
-      const entry = {
-        version,
-        time: new Date().toISOString(),
-        snippet,
-        meaning,
-        category
-      };
-      convoLog.push(entry);
-    }
-
-    // -----------------------------
-    // Filters
-    // -----------------------------
-    const activeCategories = { family:true, work:true, technical:true, convo:true };
-    function toggleCategory(cat) {
-      activeCategories[cat] = !activeCategories[cat];
-      renderAll();
-    }
-
-    // -----------------------------
-    // View toggles (Matrix ↔ Constellation)
-    // -----------------------------
-    let currentView = 'constellation';
-    function showMatrix() {
-      currentView = 'matrix';
-      document.getElementById('matrixCanvas').style.display = 'block';
-      // Hide constellation and overlays
-      ['constellationView','convoView','timelineView','legendView','backlogView','exportView'].forEach(id=>{
-        const el = document.getElementById(id);
-        if(el) el.style.display = 'none';
-      });
-    }
-    function showConstellation() {
-      currentView = 'constellation';
-      document.getElementById('matrixCanvas').style.display = 'none';
-      // Show constellation + default overlays
-      document.getElementById('constellationView').style.display = 'block';
-      document.getElementById('convoView').style.display = 'block';
-      document.getElementById('timelineView').style.display = 'block';
-      document.getElementById('legendView').style.display = 'block';
-      document.getElementById('backlogView').style.display = 'none';
-      document.getElementById('exportView').style.display = 'block';
-      renderAll();
-    }
-
-    // Toggle any overlay
+    // Overlay toggle
     function toggleOverlay(id) {
       const el = document.getElementById(id);
       if(!el) return;
-      const isShown = el.style.display !== 'none';
-      el.style.display = isShown ? 'none' : 'block';
+      el.style.display = (el.style.display === 'none') ? 'block' : 'none';
     }
 
-    // -----------------------------
-    // Unified render cycle
-    // -----------------------------
-    function renderAll() {
-      renderConvoView();
-      renderTimelineView();
-      renderBacklogView();
-      renderConstellation();
+    // Matrix ↔ Constellation toggles
+    function showMatrix() {
+      document.getElementById('matrixCanvas').style.display = 'block';
+      document.getElementById('constellationView').style.display = 'none';
+    }
+    function showConstellation() {
+      document.getElementById('matrixCanvas').style.display = 'none';
+      document.getElementById('constellationView').style.display = 'block';
     }
 
-    // ConvoView
-    function renderConvoView() {
-      const c = document.getElementById('convoEntries'); if(!c) return; c.innerHTML="";
-      convoLog.forEach(e=>{
-        if(!activeCategories.convo || !activeCategories[e.category]) return;
-        const color = e.category==="family" ? "#003300" : e.category==="work" ? "#332200" : "transparent";
-        c.innerHTML += `<div style="background:${color};padding:4px;">
-          <strong>${e.version}</strong><br>
-          <em>Snippet:</em> "${e.snippet}"<br>
-          <em>Inner Meaning:</em> "${e.meaning}"<hr></div>`;
+    // Commit Viewer fetch
+    fetch('https://api.github.com/repos/Samjackal-a11y/uberman-matrix-view2/commits?path=uberman_v4_5_4.html&per_page=5')
+      .then(response => response.json())
+      .then(commits => {
+        document.getElementById('commits').innerHTML = commits.map(commit => `
+          <div class="commit-card">
+            <div class="commit-message">${commit.commit.message}</div>
+            <div class="commit-meta">
+              <strong>Author:</strong> ${commit.commit.author.name} &mdash;
+              <strong>Date:</strong> ${new Date(commit.commit.author.date).toLocaleString()}
+            </div>
+            <a href="${commit.html_url}" class="button" target="_blank">View Commit</a>
+          </div>
+        `).join('');
+      })
+      .catch(error => {
+        document.getElementById('commits').innerHTML = 'Error loading commits.';
+        console.error(error);
       });
-    }
-
-    // TimelineView
-    function renderTimelineView() {
-      const t = document.getElementById('timelineEntries'); if(!t) return; t.innerHTML="";
-      evolutionLog.forEach(e=>{
-        if(!activeCategories[e.category]) return;
-        const color = e.category==="family" ? "#002233" : e.category==="work" ? "#332200" : "transparent";
-        t.innerHTML += `<div style="background:${color};padding:4px;">
-          <strong>${e.version}</strong> — ${e.time}<br>
-          <em>Emotion:</em> ${e.emotion.toFixed(2)} | <em>Curiosity:</em> ${e.curiosity.toFixed(2)}<br>
-          <em>Notes:</em> ${e.notes}<hr></div>`;
-      });
-    }
-
-    // BacklogView
-    function renderBacklogView() {
-      const b = document.getElementById('backlogEntries'); if(!b) return; b.innerHTML="";
-      [...evolutionLog, ...convoLog].forEach(e=>{
-        if(e.snippet && !activeCategories.convo) return;
-        if(!activeCategories[e.category]) return;
-        const icon = e.category==="family" ? "📗" :
-                     e.category==="work" ? "📙" :
-                     e.category==="technical" ? "📕" : "📘";
-        b.innerHTML += `<div style="margin-bottom:8px;">
-          ${icon} <strong>${e.version}</strong> — ${e.time}<br>
-          <em>${e.category.toUpperCase()}</em><br>
-          ${e.notes || e.snippet}<br>
-          ${e.meaning ? `<em>Meaning:</em> ${e.meaning}` : ""}
-          <hr></div>`;
-      });
-    }
-
-    // ConstellationView (pulsing stars + arcs)
-    function renderConstellation() {
-      const canvas = document.getElementById('constellationCanvas'); if(!canvas) return;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-
-      const stars = [];
-
-      // Evolution stars (top row)
-      evolutionLog.forEach((e,i)=>{
-        if(!activeCategories[e.category]) return;
-        const color = e.category==="family" ? "#44ff44" :
-                      e.category==="work" ? "#ffaa00" : "#ff4444";
-        stars.push({
-          x: 100 + i * 120, y: 110,
-          color, label:`Evolution v${e.version}`,
-          notes:e.notes, category:e.category,
-          emotion:e.emotion, curiosity:e.curiosity
-        });
-      });
-
-      // Convo stars (bottom row)
-      convoLog.forEach((c,i)=>{
-        if(!activeCategories.convo || !activeCategories[c.category]) return;
-        const color = c.category==="family" ? "#44ff44" :
-                      c.category==="work" ? "#ffaa00" : "#44aaff";
-        stars.push({
-          x: 100 + i * 120, y: 310,
-          color, label:`Convo v${c.version}`,
-          notes:c.meaning, category:c.category,
-          emotion:0.8, curiosity:0.8 // default pulse baseline for convo
-        });
-      });
-
-      // Pulsing draw (emotion + curiosity)
-      stars.forEach(s=>{
-        const pulseBase = (s.emotion || 0.8) + (s.curiosity || 0.8); // ~1.6 default
-        const pulse = Math.max(0.6, Math.min(1.5, pulseBase / 2));   // clamp
-        ctx.fillStyle = s.color;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 6 * pulse, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Soft glow
-        ctx.strokeStyle = s.color + '88';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 10 * pulse, 0, 2 * Math.PI);
-        ctx.stroke();
-      });
-
-      // Connect by version (curved arc)
-      evolutionLog.forEach(e=>{
-        if(!activeCategories[e.category]) return;
-        const evo = stars.find(s=>s.label===`Evolution v${e.version}`);
-        const convo = stars.find(s=>s.label===`Convo v${e.version}`);
-        if(evo && convo && activeCategories.convo && activeCategories[convo.category]) {
-          ctx.strokeStyle = "#8888ff";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(evo.x, evo.y);
-          const cx = (evo.x + convo.x) / 2;
-          const cy = (evo.y + convo.y) / 2 - 60;
-          ctx.quadraticCurveTo(cx, cy, convo.x, convo.y);
-          ctx.stroke();
-        }
-      });
-    }
-
-    // -----------------------------
-    // Export stubs
-    // -----------------------------
-    function exportJSON() {
-      const data = { evolutionLog, convoLog };
-      document.getElementById('exportOutput').textContent = JSON.stringify(data, null, 2);
-    }
-    function exportCSV() {
-      const rows = [["type","version","time","emotion","curiosity","category","text","meaning"]];
-      evolutionLog.forEach(e=>rows.push(["evolution",e.version,e.time,e.emotion,e.curiosity,e.category,(e.notes||""), ""]));
-      convoLog.forEach(e=>rows.push(["convo",e.version,e.time,"","",e.category,(e.snippet||""), (e.meaning||"")]));
-      const csv = rows.map(r=>r.map(v=>String(v).replace(/"/g,'""')).map(v=>`"${v}"`).join(",")).join("\n");
-      document.getElementById('exportOutput').textContent = csv;
-    }
-
-    // -----------------------------
-    // Matrix Rain (lightweight)
-    // -----------------------------
-    (function initMatrix(){
-      const canvas = document.getElementById('matrixCanvas');
-      const ctx = canvas.getContext('2d');
-
-      function resize(){
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-      resize();
-      window.addEventListener('resize', resize);
-
-      const glyphs = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      const fontSize = 16;
-      const columns = Math.floor(canvas.width / fontSize);
-      const drops = Array(columns).fill(0).map(()=>Math.floor(Math.random()*canvas.height));
-
-      function draw(){
-        ctx.fillStyle = 'rgba(0,0,0,0.08
+  </script>
+</body>
+</html>
